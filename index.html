@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bus Tours</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b1f2a;--mu:#667085;--pr:#0b7a5b;--bd:#e3e6ee;--bk:#cfd3dc}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font-family:'Noto Sans Bengali',system-ui,sans-serif;line-height:1.5}
+.w{max-width:760px;margin:0 auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+h1{font-size:22px;margin:0}h2{font-size:18px;margin:0 0 6px}.mu{color:var(--mu);font-size:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;margin:12px 0;overflow:hidden;display:block;color:inherit;text-decoration:none}
+.pad{padding:14px}.card img.th{width:100%;height:190px;object-fit:cover;display:block;background:var(--bd)}
+.top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.badge{font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.on{background:var(--pr);color:#fff}.soon{background:var(--bd);color:var(--mu)}
+.btn{display:inline-block;border:0;border-radius:10px;padding:10px 16px;background:var(--pr);color:#fff;font:inherit;font-weight:700;cursor:pointer;text-decoration:none}
+.btn.alt{background:var(--card);color:var(--tx);border:1px solid var(--bd)}.btn.red{background:#c92a2a}.btn.wa{background:#25a244;width:100%}.btn.sm{padding:4px 10px;font-size:13px}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;font:inherit;margin:4px 0 10px;background:#fff;color:var(--tx)}
+label{font-size:13px;color:var(--mu)}.g2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.det{white-space:pre-wrap}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:10px 0}
+.gal img{width:100%;height:120px;object-fit:cover;border-radius:10px;display:block}
+.gi{position:relative}.gi .ct{display:flex;gap:4px;justify-content:center;margin-top:4px}
+.bus{background:var(--card);border:2px solid var(--bd);border-radius:24px;padding:14px;max-width:300px;margin:12px auto}
+.drv{text-align:right;color:var(--mu);font-size:13px}.row{display:flex;gap:6px;justify-content:center;margin:6px 0}.gap{width:26px}
+.seat{width:44px;height:44px;border-radius:8px;border:2px solid var(--pr);background:#fff;color:var(--tx);font:600 12px inherit;cursor:pointer}
+.seat.bk{background:var(--bk);border-color:var(--bk);color:var(--mu);cursor:not-allowed;text-decoration:line-through}
+.seat.hd{background:#ffd43b;border-color:#ffd43b;cursor:not-allowed}
+.seat.sel{background:var(--pr);color:#fff}
+.seat.ad.bk{background:#c92a2a;border-color:#c92a2a;color:#fff;text-decoration:none;cursor:pointer}.seat.ad.hd{cursor:pointer}
+.bar{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--bd);padding:12px 16px;margin:0 -16px}
+.warn{background:#fff3bf;color:#5c4400;border-radius:10px;padding:10px;font-size:14px;margin:10px 0}
+table{width:100%;font-size:13px;border-collapse:collapse}td{padding:4px;border-top:1px solid var(--bd)}
+</style></head>
+<body><div id="root"></div>
+<script>
+// ====== PUT YOUR SUPABASE DETAILS HERE ======
+const SB_URL='https://kjoynpeidivqqanwfsno.supabase.co', SB_KEY='sb_publishable_-zosCdXmn_UzfvHMeXSXLw_smvznBnY';
+// ============================================
+const READY=!SB_URL.startsWith('YOUR_')&&!!window.supabase;
+const sb=READY?supabase.createClient(SB_URL,SB_KEY):null;
+const $=s=>document.getElementById(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fd=d=>d?new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}):'';
+const S={trips:[],st:{},set:{brand:'Bus Tours',wa:''},admin:false};
+let sel=new Set(),timer=null;
+const canBook=(t,i)=>i===0||t.open;
+const taken=t=>Object.keys(S.st[t.id]||{}).length;
+
+async function load(){
+  const s=(await sb.auth.getSession()).data.session;S.admin=!!s;
+  const [t,st,se]=await Promise.all([
+    sb.from('trips').select('*').order('created_at',{ascending:false}),
+    sb.from(S.admin?'seats':'seat_status').select('*'),
+    sb.from('settings').select('*')]);
+  S.trips=t.data||[];S.st={};
+  (st.data||[]).forEach(r=>{if(r.status==='held'&&r.held_until&&new Date(r.held_until)<new Date())return;(S.st[r.trip_id]=S.st[r.trip_id]||{})[r.label]=r});
+  (se.data||[]).forEach(r=>S.set[r.key]=r.value);
+}
+function labels(n){const k=Math.floor((n-5)/4),r=[];for(let i=1;i<=k;i++)r.push(['A','B','C','D'].map(c=>i+c));r.push(['A','B','C','D','E'].map(c=>(k+1)+c));return r}
+function seatMap(t,ad){
+  const m=S.st[t.id]||{};let h='<div class="bus"><div class="drv">🧑‍✈️ Driver</div>';
+  labels(t.seats).forEach(r=>{h+='<div class="row">';r.forEach((s,i)=>{
+    if(r.length===4&&i===2)h+='<span class="gap"></span>';
+    const x=m[s],c=x?(x.status==='booked'?' bk':' hd'):'';
+    h+='<button class="seat'+(ad?' ad':'')+c+(!ad&&sel.has(s)?' sel':'')+'" data-s="'+s+'"'+(!ad&&x?' disabled':'')+'>'+s+'</button>'});h+='</div>'});
+  return h+'</div><p class="mu" style="text-align:center">White = free · Yellow = on hold · Grey/Red = booked</p>';
+}
+function home(){
+  let h='<div class="w"><header><h1>🚌 '+esc(S.set.brand)+'</h1></header>';
+  S.trips.forEach((t,i)=>{const on=canBook(t,i);
+    h+='<a class="card" href="#t-'+t.id+'">'+(t.thumb?'<img class="th" src="'+esc(t.thumb)+'">':'')+'<div class="pad"><div class="top"><div><h2>'+esc(t.title)+'</h2><div class="mu">'+esc(t.from_place)+' → '+esc(t.to_place)+'</div></div><span class="badge '+(on?'on':'soon')+'">'+(on?'Booking Open':'Coming Soon')+'</span></div><div class="mu" style="margin-top:6px">📅 '+fd(t.trip_date)+' · ⏰ '+esc(t.trip_time)+' · ₹'+t.price+(on?' · 💺 '+(t.seats-taken(t))+' seats left':'')+'</div></div></a>'});
+  $('root').innerHTML=h+(S.trips.length?'':'<p class="mu">New trips coming soon.</p>')+'<p class="mu"><a href="#admin">Admin</a></p></div>';
+}
+function trip(t,i){
+  const on=canBook(t,i);
+  let h='<div class="w"><a href="#" class="mu">← All trips</a>'+(t.thumb?'<img class="th" style="width:100%;height:220px;object-fit:cover;border-radius:14px;margin-top:8px" src="'+esc(t.thumb)+'">':'')+'<h1 style="margin-top:8px">'+esc(t.title)+'</h1><p class="mu">'+esc(t.from_place)+' → '+esc(t.to_place)+'<br>📅 '+fd(t.trip_date)+' · ⏰ '+esc(t.trip_time)+' · ₹'+t.price+'/seat<br>📍 '+esc(t.boarding)+'</p><p class="det">'+esc(t.details)+'</p>';
+  const ph=t.photos||[];if(ph.length)h+='<div class="gal">'+ph.map(u=>'<a href="'+esc(u)+'" target="_blank"><img src="'+esc(u)+'" loading="lazy"></a>').join('')+'</div>';
+  if(!on)return $('root').innerHTML=h+'<div class="warn">Coming Soon — booking has not started yet.</div></div>';
+  h+='<h2>Choose your seats</h2>'+seatMap(t,false)+'<div class="card pad"><div class="g2"><div><label>Your name</label><input id="nm"></div><div><label>Phone number</label><input id="ph" type="tel"></div></div></div><div class="bar"><div id="sm" class="mu" style="margin-bottom:8px"></div><button class="btn wa" id="go">Hold seats &amp; send on WhatsApp</button></div></div>';
+  $('root').innerHTML=h;
+  const upd=()=>{$('sm').textContent=sel.size?('Seats: '+[...sel].join(', ')+' · Total ₹'+sel.size*t.price):'No seats selected'};upd();
+  document.querySelectorAll('.seat').forEach(b=>b.onclick=()=>{const s=b.dataset.s;sel.has(s)?sel.delete(s):sel.add(s);b.classList.toggle('sel');upd()});
+  $('go').onclick=async()=>{
+    const nm=$('nm').value.trim(),ph=$('ph').value.trim();
+    if(!sel.size||!nm||!ph)return alert('Please select seats and enter your name and phone number');
+    $('go').disabled=true;
+    const {data,error}=await sb.rpc('hold_seats',{p_trip:t.id,p_labels:[...sel],p_name:nm,p_phone:ph});
+    $('go').disabled=false;
+    if(error||data!=='ok'){alert(data==='taken'?'Sorry, someone just took one of those seats. Please choose again.':'Booking failed, please try again.');sel=new Set();await load();return render()}
+    const msg='New booking\nTrip: '+t.title+'\nDate: '+fd(t.trip_date)+' '+(t.trip_time||'')+'\nSeats: '+[...sel].join(', ')+'\nName: '+nm+'\nPhone: '+ph+'\nTotal: ₹'+sel.size*t.price+'\n(Seats held for 15 minutes)';
+    sel=new Set();
+    location.href='https://wa.me/'+String(S.set.wa).replace(/\D/g,'')+'?text='+encodeURIComponent(msg);
+  };
+}
+async function shrink(f){const im=await createImageBitmap(f),r=Math.min(1,1400/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*r;c.height=im.height*r;c.getContext('2d').drawImage(im,0,0,c.width,c.height);return new Promise(ok=>c.toBlob(ok,'image/jpeg',.82))}
+async function up(tid,f){const p=tid+'/'+Date.now()+Math.random().toString(36).slice(2,6)+'.jpg';const {error}=await sb.storage.from('trip-photos').upload(p,await shrink(f),{contentType:'image/jpeg'});if(error){alert(error.message);return null}return sb.storage.from('trip-photos').getPublicUrl(p).data.publicUrl}
+const redo=async()=>{await load();admin()};
+function admin(){
+  if(!S.admin)return $('root').innerHTML='<div class="w"><a href="#" class="mu">← Back</a><h1>Admin Login</h1><label>Email</label><input id="em" type="email"><label>Password</label><input id="pw" type="password"><button class="btn" id="li">Login</button></div>',
+    $('li').onclick=async()=>{const {error}=await sb.auth.signInWithPassword({email:$('em').value,password:$('pw').value});error?alert(error.message):redo()};
+  let h='<div class="w"><header><h1>Admin</h1><span><a class="btn alt sm" href="#">Site</a> <button class="btn alt sm" id="lo">Logout</button></span></header><div class="card pad"><div class="g2"><div><label>Brand name</label><input id="br" value="'+esc(S.set.brand)+'"></div><div><label>WhatsApp (with country code, 919XXXXXXXXX)</label><input id="wa" value="'+esc(S.set.wa)+'"></div></div><button class="btn sm" id="ss">Save</button></div><button class="btn" id="add">➕ New trip</button>';
+  S.trips.forEach((t,i)=>{const m=S.st[t.id]||{},ph=t.photos||[];
+    h+='<div class="card pad" data-id="'+t.id+'"><div class="top"><h2>'+esc(t.title)+'</h2><span class="badge '+(canBook(t,i)?'on':'soon')+'">'+(canBook(t,i)?'Open':'Coming Soon')+'</span></div>'+
+    '<label>Trip title</label><input data-f="title" value="'+esc(t.title)+'"><div class="g2"><div><label>From</label><input data-f="from_place" value="'+esc(t.from_place)+'"></div><div><label>To</label><input data-f="to_place" value="'+esc(t.to_place)+'"></div><div><label>Date</label><input data-f="trip_date" type="date" value="'+(t.trip_date||'')+'"></div><div><label>Time</label><input data-f="trip_time" value="'+esc(t.trip_time)+'"></div><div><label>Price ₹</label><input data-f="price" type="number" value="'+t.price+'"></div><div><label>Number of seats</label><select data-f="seats">'+[49,53,57].map(n=>'<option'+(n===t.seats?' selected':'')+'>'+n+'</option>').join('')+'</select></div></div><label>Boarding point</label><input data-f="boarding" value="'+esc(t.boarding)+'"><label>Details (highlights, what is included, rules...)</label><textarea data-f="details" rows="5">'+esc(t.details)+'</textarea><button class="btn sm" data-a="save">Save</button> '+(i>0?'<button class="btn alt sm" data-a="open">'+(t.open?'Set to Coming Soon':'Open booking')+'</button> ':'')+'<button class="btn red sm" data-a="del">Delete</button>'+
+    '<h2 style="margin-top:14px">Thumbnail</h2>'+(t.thumb?'<img class="th" style="height:120px;width:200px;border-radius:10px" src="'+esc(t.thumb)+'"><br>':'')+'<input type="file" accept="image/*" data-a="thumb">'+
+    '<h2>Photo gallery (reorder)</h2><div class="gal">'+ph.map((u,k)=>'<div class="gi"><img src="'+esc(u)+'"><div class="ct"><button class="btn alt sm" data-a="l" data-k="'+k+'">◀</button><button class="btn alt sm" data-a="r" data-k="'+k+'">▶</button><button class="btn alt sm" data-a="th" data-k="'+k+'">⭐</button><button class="btn red sm" data-a="rm" data-k="'+k+'">✕</button></div></div>').join('')+'</div><input type="file" accept="image/*" multiple data-a="photos"><p class="mu">⭐ = set as thumbnail</p>'+
+    '<h2>Seats (click a free seat = booked; click a booked/yellow seat = free)</h2><div data-m>'+seatMap(t,true)+'</div>'+
+    '<table>'+Object.values(m).map(r=>'<tr><td>'+r.label+'</td><td>'+(r.status==='booked'?'✅ Booked':'⏳ Held')+'</td><td>'+esc(r.name)+'<br>'+esc(r.phone)+'</td><td>'+(r.status==='held'?'<button class="btn sm" data-a="ok" data-l="'+r.label+'">Confirm</button>':'')+'</td></tr>').join('')+'</table></div>'});
+  $('root').innerHTML=h+'</div>';
+  $('lo').onclick=async()=>{await sb.auth.signOut();redo()};
+  $('ss').onclick=async()=>{await sb.from('settings').upsert([{key:'brand',value:$('br').value},{key:'wa',value:$('wa').value}]);redo()};
+  $('add').onclick=async()=>{await sb.from('trips').insert({title:'New trip',from_place:'Bandel',open:true});redo()};
+  document.querySelectorAll('.card[data-id]').forEach(c=>{
+    const id=c.dataset.id,t=S.trips.find(x=>x.id===id),ph=[...(t.photos||[])];
+    const upd=async o=>{const {error}=await sb.from('trips').update(o).eq('id',id);if(error)alert(error.message);redo()};
+    c.querySelectorAll('[data-m] .seat').forEach(b=>b.onclick=async()=>{const s=b.dataset.s,x=(S.st[id]||{})[s];
+      if(x){await sb.from('seats').delete().eq('trip_id',id).eq('label',s)}else{await sb.from('seats').insert({trip_id:id,label:s,status:'booked',name:'Admin'})}redo()});
+    c.querySelectorAll('[data-a]').forEach(b=>{const a=b.dataset.a,k=+b.dataset.k;
+      if(b.type==='file'){b.onchange=async()=>{const fs=[...b.files];if(!fs.length)return;b.disabled=true;
+        if(a==='thumb'){const u=await up(id,fs[0]);if(u)upd({thumb:u})}
+        else{const us=[];for(const f of fs){const u=await up(id,f);if(u)us.push(u)}upd({photos:ph.concat(us)})}};return}
+      b.onclick=async()=>{
+        if(a==='save'){const o={};c.querySelectorAll('[data-f]').forEach(e=>{const f=e.dataset.f;o[f]=['price','seats'].includes(f)?+e.value:(f==='trip_date'&&!e.value?null:e.value)});upd(o)}
+        else if(a==='open')upd({open:!t.open});
+        else if(a==='del'){if(confirm('Delete this?')){await sb.from('trips').delete().eq('id',id);redo()}}
+        else if(a==='rm'){ph.splice(k,1);upd({photos:ph})}
+        else if(a==='th')upd({thumb:ph[k]});
+        else if(a==='l'&&k>0){[ph[k-1],ph[k]]=[ph[k],ph[k-1]];upd({photos:ph})}
+        else if(a==='r'&&k<ph.length-1){[ph[k+1],ph[k]]=[ph[k],ph[k+1]];upd({photos:ph})}
+        else if(a==='ok'){await sb.from('seats').update({status:'booked',held_until:null}).eq('trip_id',id).eq('label',b.dataset.l);redo()}
+      }});
+  });
+}
+function render(){
+  clearInterval(timer);const h=location.hash.slice(1);window.scrollTo(0,0);
+  if(h==='admin')return admin();
+  const i=S.trips.findIndex(t=>'t-'+t.id===h);
+  if(i>=0){trip(S.trips[i],i);timer=setInterval(async()=>{if(document.activeElement&&document.activeElement.tagName==='INPUT')return;await load();const s=new Set(sel);sel=new Set([...s].filter(x=>!(S.st[S.trips[i].id]||{})[x]));const n=$('nm')?$('nm').value:'',p=$('ph')?$('ph').value:'';trip(S.trips[i],i);if($('nm')){$('nm').value=n;$('ph').value=p}},20000);return}
+  home();
+}
+addEventListener('hashchange',()=>{sel=new Set();render()});
+if(!READY)$('root').innerHTML='<div class="w"><div class="warn">'+(SB_URL.startsWith('YOUR_')?'Set SB_URL and SB_KEY at the top of index.html.':'Supabase library failed to load. Check your internet, or open the site on GitHub Pages.')+'</div></div>';
+else load().then(render);
+</script></body></html>
